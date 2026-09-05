@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./assets/logo.svg" width="88" alt="SoroTip logo" />
+</p>
+
 # @sorotip/sdk
 
 **TypeScript SDK for SoroTip — on-chain tipping and creator monetization on Stellar Soroban**
