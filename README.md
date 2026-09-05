@@ -10,6 +10,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Drips Wave](https://img.shields.io/badge/Drips-Wave%20Program-8A2BE2)](https://drips.network/wave)
+[![Live App](https://img.shields.io/badge/Live-sorotip--app.vercel.app-F97316)](https://sorotip-app.vercel.app)
 
 `@sorotip/sdk` wraps the [SoroTip](https://github.com/SoroTip/sorotip-contracts)
 Soroban contract behind a typed client, a Freighter wallet adapter, formatting
