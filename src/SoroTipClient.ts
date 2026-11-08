@@ -58,6 +58,10 @@ interface TipContractMethods {
     args: { creator: string; goal_amount: bigint; description: string },
     options?: contract.MethodOptions,
   ): Tx<bigint>;
+  complete_tip_goal(
+    args: { creator: string; goal_id: bigint },
+    options?: contract.MethodOptions,
+  ): Tx<void>;
   get_profile(args: { wallet: string }, options?: contract.MethodOptions): Tx<RawCreatorProfile>;
   get_tip_history(
     args: { wallet: string; limit: number },
@@ -80,6 +84,7 @@ interface TipContractMethods {
     args: { limit: number },
     options?: contract.MethodOptions,
   ): Tx<RawLeaderboardEntry[]>;
+  get_fee(options?: contract.MethodOptions): Tx<number>;
 }
 
 /** Public Soroban RPC endpoints with a well-known default. Mainnet has none — pass `rpcUrl` explicitly. */
@@ -94,7 +99,7 @@ function toDate(seconds: bigint | number): Date {
 }
 
 /** Raw shape returned by the contract for a `CreatorProfile`, before mapping to the SDK's public type. */
-interface RawCreatorProfile {
+export interface RawCreatorProfile {
   id: bigint;
   wallet: string;
   name: string;
@@ -106,7 +111,7 @@ interface RawCreatorProfile {
   registered_at: bigint;
 }
 
-interface RawTip {
+export interface RawTip {
   id: bigint;
   from: string;
   to: string;
@@ -116,7 +121,7 @@ interface RawTip {
   timestamp: bigint;
 }
 
-interface RawSubscription {
+export interface RawSubscription {
   id: bigint;
   supporter: string;
   creator: string;
@@ -126,7 +131,7 @@ interface RawSubscription {
   created_at: bigint;
 }
 
-interface RawTipGoal {
+export interface RawTipGoal {
   id: bigint;
   creator: string;
   goal_amount: bigint;
@@ -136,7 +141,7 @@ interface RawTipGoal {
   created_at: bigint;
 }
 
-interface RawProtocolStats {
+export interface RawProtocolStats {
   total_tips: number;
   total_volume: bigint;
   total_creators: number;
@@ -144,14 +149,20 @@ interface RawProtocolStats {
   fee_collected: bigint;
 }
 
-interface RawLeaderboardEntry {
+export interface RawLeaderboardEntry {
   wallet: string;
   name: string;
   total_received: bigint;
   tip_count: number;
 }
 
-function mapProfile(raw: RawCreatorProfile): CreatorProfile {
+/**
+ * Maps the contract's raw `CreatorProfile` shape (snake_case fields, bigint
+ * amounts/ids) to the SDK's public {@link CreatorProfile} type. Exported for
+ * testing against real contract-serialized fixtures — not part of the
+ * client's day-to-day public API surface.
+ */
+export function mapProfile(raw: RawCreatorProfile): CreatorProfile {
   return {
     id: raw.id.toString(),
     wallet: raw.wallet,
@@ -165,7 +176,8 @@ function mapProfile(raw: RawCreatorProfile): CreatorProfile {
   };
 }
 
-function mapTip(raw: RawTip): Tip {
+/** @see mapProfile */
+export function mapTip(raw: RawTip): Tip {
   return {
     id: raw.id.toString(),
     from: raw.from,
@@ -177,7 +189,8 @@ function mapTip(raw: RawTip): Tip {
   };
 }
 
-function mapSubscription(raw: RawSubscription): Subscription {
+/** @see mapProfile */
+export function mapSubscription(raw: RawSubscription): Subscription {
   return {
     id: raw.id.toString(),
     supporter: raw.supporter,
@@ -189,7 +202,8 @@ function mapSubscription(raw: RawSubscription): Subscription {
   };
 }
 
-function mapGoal(raw: RawTipGoal): TipGoal {
+/** @see mapProfile */
+export function mapGoal(raw: RawTipGoal): TipGoal {
   const goalAmount = raw.goal_amount;
   const currentAmount = raw.current_amount;
   const progressPercent =
@@ -207,7 +221,8 @@ function mapGoal(raw: RawTipGoal): TipGoal {
   };
 }
 
-function mapStats(raw: RawProtocolStats): ProtocolStats {
+/** @see mapProfile */
+export function mapStats(raw: RawProtocolStats): ProtocolStats {
   return {
     totalTips: raw.total_tips,
     totalVolume: raw.total_volume.toString(),
@@ -217,7 +232,8 @@ function mapStats(raw: RawProtocolStats): ProtocolStats {
   };
 }
 
-function mapLeaderboardEntry(raw: RawLeaderboardEntry): LeaderboardEntry {
+/** @see mapProfile */
+export function mapLeaderboardEntry(raw: RawLeaderboardEntry): LeaderboardEntry {
   return {
     wallet: raw.wallet,
     name: raw.name,
@@ -381,6 +397,22 @@ export class SoroTipClient {
     };
   }
 
+  /**
+   * Manually marks the connected wallet's creator tip goal as completed. The
+   * contract also completes goals automatically inside {@link tip} and
+   * {@link processDueSubscriptions} once the target is reached — this is
+   * only needed to close a goal early.
+   */
+  async completeTipGoal(goalId: string): Promise<{ txHash: string }> {
+    const { client, publicKey } = await this.buildSignedClient();
+    const tx = await client.complete_tip_goal({
+      creator: publicKey,
+      goal_id: BigInt(goalId),
+    });
+    const sent = await tx.signAndSend();
+    return { txHash: sent.sendTransactionResponse!.hash };
+  }
+
   /** Reads a creator's public profile. Works without a connected wallet. */
   async getProfile(wallet: string): Promise<CreatorProfile> {
     const client = await this.buildClient();
@@ -429,6 +461,13 @@ export class SoroTipClient {
     const client = await this.buildClient();
     const tx = await client.get_top_creators({ limit });
     return tx.result.map(mapLeaderboardEntry);
+  }
+
+  /** Returns the current protocol fee, in basis points. Works without a connected wallet. */
+  async getFee(): Promise<number> {
+    const client = await this.buildClient();
+    const tx = await client.get_fee();
+    return tx.result;
   }
 
   /** Returns whether `wallet` has registered a creator profile. Works without a connected wallet. */
